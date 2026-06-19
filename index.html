@@ -1042,6 +1042,8 @@
         background: var(--surface);
         border: 1px solid var(--line);
         box-shadow: 0 26px 64px -18px rgba(0, 0, 0, 0.6);
+      }
+      .chatpanel.chat-enter {
         animation: fadeUp 0.25s ease;
       }
       .chathead {
@@ -3008,6 +3010,7 @@ Realização: SEBRAE Maranhão · Complexo Multicenter Negócios e Eventos`;
       function renderBot() {
         const root = $("#bot-root");
         if (!root) return;
+        const shouldAnimatePanel = BOT.open && !root.querySelector(".chatpanel");
         syncBotScrollLock();
         if (!BOT.open) {
           root.innerHTML = `<button class="fab" data-act="botToggle"><span class="av">${botAvatar(20)}</span> SEBRAE Bot<span class="nd"></span></button>`;
@@ -3028,7 +3031,7 @@ Realização: SEBRAE Maranhão · Complexo Multicenter Negócios e Eventos`;
               `<button class="chip" data-act="botQuick" data-q="${q}">${q}</button>`,
           )
           .join("");
-        root.innerHTML = `<div class="chatpanel">
+        root.innerHTML = `<div class="chatpanel${shouldAnimatePanel ? " chat-enter" : ""}">
     <div class="chathead"><span style="width:40px;height:40px;border-radius:50%;background:#0E1420;display:flex;align-items:center;justify-content:center">${botAvatar(24)}</span>
       <div class="bot-title"><div style="font-weight:700">SEBRAE Bot</div><div style="font-size:12px;color:var(--mint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">● online · assistente do evento</div></div>
       <img src="${LOGO_SEBRAE}" alt="SEBRAE" style="height:16px;opacity:.85">
