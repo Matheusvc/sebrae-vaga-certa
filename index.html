@@ -295,7 +295,7 @@
         top: 0;
         z-index: 40;
         backdrop-filter: blur(12px);
-        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        background: var(--bg);
         border-bottom: 1px solid var(--line);
         transition:
           background 0.3s,
@@ -539,6 +539,9 @@
         border-radius: 16px;
         overflow: hidden;
         background: var(--elevated);
+        position: relative;
+        z-index: 0;
+        isolation: isolate;
       }
       #bigmap {
         height: 340px;
@@ -548,6 +551,7 @@
       }
       .leaflet-container {
         background: var(--elevated);
+        z-index: 0;
       }
       /* account */
       .acct {
@@ -1289,9 +1293,21 @@
         }
       }
 
-      /* mapa: garante que o controle de camadas não estoure */
-      .leaflet-top.leaflet-right {
-        z-index: 5;
+      /* mapa: mantém o Leaflet preso dentro do card */
+      .leaflet-pane,
+      .leaflet-top,
+      .leaflet-bottom {
+        z-index: 1;
+      }
+      .leaflet-control-container {
+        position: relative;
+        z-index: 2;
+      }
+      .leaflet-top.leaflet-left,
+      .leaflet-top.leaflet-right,
+      .leaflet-bottom.leaflet-left,
+      .leaflet-bottom.leaflet-right {
+        z-index: 2;
       }
       .leaflet-control-layers,
       .leaflet-bar {
