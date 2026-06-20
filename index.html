@@ -541,6 +541,8 @@ label.f {
 }
 .leaflet-container {
   background: var(--elevated);
+  isolation: isolate;
+  z-index: 0;
 }
 /* account */
 .acct {
@@ -742,7 +744,7 @@ td {
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 3000;
   background: rgba(5, 8, 14, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
@@ -762,7 +764,7 @@ td {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 80;
+  z-index: 3200;
   background: var(--text);
   color: var(--bg);
   padding: 12px 20px;
@@ -1185,6 +1187,24 @@ td {
 .leaflet-top.leaflet-right { z-index: 5; }
 .leaflet-control-layers, .leaflet-bar { box-shadow: 0 4px 14px rgba(0,0,0,.25); }
 
+/* ===== responsividade — anti-overflow e ajustes mobile ===== */
+html, body { overflow-x: clip; max-width: 100%; }
+.kpi { min-width: 0; }
+.kpis > *, .charts > *, .grid > *, .pgrid > * { min-width: 0; }
+.card table { width: 100%; }
+@media (max-width: 700px) {
+  .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi { padding: 14px; }
+  .kpi .v { font-size: 24px; }
+  .charts { grid-template-columns: 1fr; }
+  .grid[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 380px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+}
+.mobnav { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.mobnav::-webkit-scrollbar { height: 5px; }
+.mobnav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 </style>
   </head>
   <body>
@@ -2167,7 +2187,7 @@ function adminView() {
       ${it("relatorios", "chart", "Relatórios")}${it("config", "gear", "Configurações")}
       <div style="flex:1"></div><button class="navi" data-act="theme">${ic(S.theme === "dark" ? "sun" : "moon", "currentColor", 18)}Tema</button><button class="navi" data-act="logout" style="color:var(--coral)">${ic("out")}Sair do painel</button></aside>
     <div style="flex:1;min-width:0"><div class="wrap" style="padding:24px 28px"><div class="row" style="margin-bottom:20px;flex-wrap:wrap;gap:12px"><div><div class="eyebrow">Gestor de Operação</div><h2 style="font-size:22px">${adminTitle()}</h2></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill" style="color:var(--muted)">${ic("clock", "currentColor", 14)} <span data-clock>${fmtClock(Date.now())}</span></span><span class="pill" style="color:var(--mint)">${ic("user", "currentColor", 14)} ${S.user ? escapeHtml(S.user.name) : ""}</span><span id="status-pill" class="pill"></span></div></div>
-      <div class="mobnav" style="margin-bottom:16px">${["dashboard", "movimentacao", "vagas", "monitor", "reservas", "usuarios", "parceiros", "relatorios", "config"].map((p) => `<a class="${S.adminPage === p ? "on" : ""}" data-act="apage" data-p="${p}">${p}</a>`).join("")}</div>
+      <div class="mobnav" style="margin-bottom:16px">${[["dashboard", "Visão geral"], ["movimentacao", "Movimentação"], ["vagas", "Mapa de vagas"], ["monitor", "Câmeras"], ["reservas", "Reservas"], ["usuarios", "Usuários"], ["parceiros", "Parceiros"], ["relatorios", "Relatórios"], ["config", "Config"]].map(([p, l]) => `<a class="${S.adminPage === p ? "on" : ""}" data-act="apage" data-p="${p}">${l}</a>`).join("")}</div>
       ${adminPage()}</div></div></div></div>`;
 }
 const adminTitle = () =>
@@ -2189,8 +2209,6 @@ function adminPage() {
     free = e.total - e.occupied,
     full = r >= 0.85;
   if (S.adminPage === "dashboard") {
-    const ent = Math.round(e.occupied * 1.6),
-      sai = ent - e.occupied;
     return `<div class="grid" style="gap:16px"><div id="alert-slot">${full ? alertBanner(Math.max(1, Math.round((0.9 - r) / 0.012))) : ""}</div>
       ${(function () { const ov = reservations.filter(isOverdue); return ov.length ? `<div class="card" style="padding:16px;display:flex;gap:12px;align-items:center;background:${ACC.amber}14;border-color:${ACC.amber}55">${ic("clock", ACC.amber, 22)}<div style="flex:1"><div style="font-weight:700">${ov.length} reserva(s) fora do prazo</div><div class="muted" style="font-size:13px">Passaram da tolerancia de ${TOLERANCIA_MIN} min sem check-in \u2014 vagas podem ser liberadas.</div></div><button class="ghost sm" data-act="apage" data-p="reservas">Ver reservas</button></div>` : ""; })()}
       <div class="kpis">${aKpi("Total de vagas", e.total)}${aKpi("Dentro agora", `<span class="k-occ">${insideNow()}</span>`, st.hex)}${aKpi("Livres", `<span class="k-free">${free}</span>`, ACC.mint)}${aKpi("Entradas hoje", `<span class="k-ent">${DAYIN}</span>`, ACC.mint)}${aKpi("Saídas hoje", `<span class="k-sai">${DAYOUT}</span>`, ACC.amber)}${aKpi("Reservas ativas", reservations.filter((x) => x.status === "futura").length + 12, ACC.cyan)}</div>
@@ -2214,8 +2232,8 @@ function adminPage() {
     </div>`;
   }
   if (S.adminPage === "monitor") {
-    const ent = Math.round(e.occupied * 1.6),
-      sai = ent - e.occupied;
+    const ent = DAYIN,
+      sai = DAYOUT;
     return `<div class="grid" style="gap:16px"><div class="kpis">${aKpi("Câmeras ativas", "3 / 3", ACC.mint)}${aKpi("Entradas (YOLO)", `<span class="k-ent">${ent}</span>`)}${aKpi("Saídas (YOLO)", `<span class="k-sai">${sai}</span>`)}${aKpi("Dentro agora", `<span class="k-occ">${e.occupied}</span>`, st.hex)}</div>
       <div class="pgrid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${["Cancela Norte", "Cancela Sul", "Pátio Central"].map((n, i) => `<div class="card" style="overflow:hidden"><div style="height:120px;background:linear-gradient(135deg,var(--elevated),var(--surface));position:relative;display:flex;align-items:center;justify-content:center"><div style="position:absolute;left:0;right:0;height:2px;background:${ACC.mint};opacity:.8;top:${50 + i * 6}%"></div><span class="muted" style="font-size:11px">linha virtual · YOLOv11</span></div><div style="padding:13px"><div class="row"><b style="font-size:13px">${n}</b><span class="badge" style="background:${ACC.mint}1f;color:${ACC.mint}">ao vivo</span></div><div class="muted" style="font-size:12px;margin-top:6px">in ${Math.round(ent / 3)} · out ${Math.round(sai / 3)}</div></div></div>`).join("")}</div>
       <div class="card" style="padding:16px;font-size:13px" class="muted">${ic("cam", "var(--muted)", 16)} Contagem por cruzamento de linha virtual (YOLOv11 + OpenCV) nas câmeras existentes → <span class="mono">POST /vision/count</span> → ocupação recalculada em tempo real.</div></div>`;
@@ -2262,7 +2280,7 @@ function footer() {
   return `<footer class="footer"><div class="row" style="flex-wrap:wrap;gap:16px"><div class="brand"><div class="name">SEBRAE <b>Vaga Certa</b></div></div>
   <div class="muted" style="font-size:13px">YOLOv11 · OpenCV · FastAPI · React · PostgreSQL · OpenStreetMap</div>
   <div style="display:flex;align-items:center;gap:10px"><span class="faint" style="font-size:12px">Realização</span><img src="${LOGO_SEBRAE}" alt="SEBRAE" style="height:22px"></div></div>
-  <div class="faint" style="font-size:12px;margin-top:14px">© 2026 SEBRAE Vaga Certa · ${ORG.name} · Complexo Multicenter Negócios e Eventos</div></footer>`;
+  <div class="faint" style="font-size:12px;margin-top:14px">© 2026 SEBRAE Vaga Certa · ${ORG.name} · Complexo Multicenter Negócios e Eventos · <b style="color:var(--mint)">build 2.1 · responsivo</b></div></footer>`;
 }
 function guaritaView() {
   const e = EVENTS[0];
@@ -2316,7 +2334,7 @@ function guaritaView() {
       <div class="row" style="margin-bottom:18px;flex-wrap:wrap;gap:12px"><div><div class="eyebrow">Operação de campo</div><h2 style="font-size:22px">${titles[tab]}</h2></div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill" style="color:var(--muted)">${ic("clock", "currentColor", 14)} <span data-clock>${fmtClock(Date.now())}</span></span><span class="pill" style="color:${ACC.mint}">${ic("user", "currentColor", 14)} ${S.user ? escapeHtml(S.user.name) : ""}</span></div></div>
       <div class="kpis" style="margin-bottom:18px">${aKpi("Câmeras ativas", "3 / 3", ACC.mint)}${aKpi("Entradas hoje", `<span class="k-ent">${DAYIN}</span>`, ACC.mint)}${aKpi("Saídas hoje", `<span class="k-sai">${DAYOUT}</span>`, ACC.amber)}${aKpi("Dentro agora", `<span class="k-occ">${insideNow()}</span>`, ACC.cyan)}${aKpi("Fora do prazo", overdue.length, overdue.length ? ACC.amber : undefined)}</div>
-      <div class="mobnav" style="margin-bottom:16px">${["acesso", "cameras", "movimentacao", "vagas"].map((pp) => `<a class="${tab === pp ? "on" : ""}" data-act="gtab" data-t="${pp}">${pp}</a>`).join("")}</div>
+      <div class="mobnav" style="margin-bottom:16px">${[["acesso", "Acesso"], ["cameras", "Câmeras"], ["movimentacao", "Movimentação"], ["vagas", "Vagas"]].map(([pp, l]) => `<a class="${tab === pp ? "on" : ""}" data-act="gtab" data-t="${pp}">${l}</a>`).join("")}</div>
       ${content}
     </div></div></div></div>`;
 }
