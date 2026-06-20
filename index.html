@@ -1244,6 +1244,15 @@ const I = {
   search: "M10 4a6 6 0 1 0 0 12a6 6 0 1 0 0 -12M20 20l-4.5-4.5",
   contrast: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0 -18M12 3v18",
   bot: "M9 10h.01M15 10h.01M7 7h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM12 4v3M8 21l1-2M16 21l-1-2",
+  car: "M5 13l1.6-4.3A2 2 0 0 1 8.5 7h7a2 2 0 0 1 1.9 1.7L19 13M4 13h16v4H4zM7 17v2M17 17v2M7 13.5h.5M16.5 13.5h.5",
+  moto: "M5.5 17a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM18.5 17a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM7.5 14.5h6l2.5-4H19M13.5 10.5l-2-2.5H8",
+  bus: "M4 6h16v9H4zM4 15v3M20 15v3M4 11h16M8 18h8M8 15.5h.5M15.5 15.5h.5",
+  wa: "M12 3a9 9 0 0 0-7.7 13.7L3 21l4.5-1.2A9 9 0 1 0 12 3zM9 8.4c.2-.5.4-.5.6-.5h.5c.2 0 .4 0 .6.5l.7 1.7c.1.2 0 .4-.1.6l-.4.5c-.2.2-.2.3-.1.6a5.5 5.5 0 0 0 2.5 2.3c.3.1.4.1.6-.1l.5-.6c.2-.2.3-.2.6-.1l1.6.8c.2.1.4.2.4.4 0 .7-.4 1.5-1.5 1.7-.9.1-2 0-3.8-.9a8.5 8.5 0 0 1-3.3-3.4c-.7-1.3-.5-2.3-.2-2.9z",
+  no: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM6 6l12 12",
+  arrin: "M5 5v14M5 12h13M13 7l5 5-5 5",
+  arrout: "M19 5v14M19 12H6M11 7l-5 5 5 5",
+  layers: "M12 2 2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5",
+  refresh: "M21 12a9 9 0 1 1-3-6.7M21 4v4h-4",
 };
 const ic = (k, c = "currentColor", s = 18) =>
   `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${(
@@ -1393,6 +1402,69 @@ const PARTNERS = [
   },
   { id: 4, name: "Cond. Novo Tempo II", type: "condo", free: 45, dist: 520, walk: 8, price: 9, lat: -2.5038, lng: -44.2685, active: false },
 ];
+/* ===== veiculos, liberacao de reserva, zonas proibidas ===== */
+const VEHICLES = [
+  { key: "carro", label: "Carro", icon: "car", prefix: "C", grid: 40 },
+  { key: "moto", label: "Moto", icon: "moto", prefix: "M", grid: 18 },
+  { key: "onibus", label: "Onibus", icon: "bus", prefix: "O", grid: 6 },
+];
+const NOPARK = [
+  { name: "Em frente ao SEBRAE", desc: "Embarque/desembarque e acesso de emergencia", lat: -2.50235, lng: -44.2663 },
+  { name: "Em frente a Assembleia (ALEMA)", desc: "Faixa exclusiva \u2014 proibido parar e estacionar", lat: -2.5009, lng: -44.2679 },
+];
+(function () {
+  const n = Date.now();
+  if (EVENTS[0]) EVENTS[0].releaseAt = new Date(n - 2 * 864e5).toISOString();
+  if (EVENTS[1]) EVENTS[1].releaseAt = new Date(n + 90 * 6e4).toISOString();
+  if (EVENTS[2]) EVENTS[2].releaseAt = new Date(n + 2 * 864e5).toISOString();
+  if (EVENTS[3]) EVENTS[3].releaseAt = new Date(n - 36e5).toISOString();
+})();
+/* ===== movimentacao (entradas/saidas) + modelo de vagas ===== */
+let DAYOUT = 150, DAYIN = (EVENTS[0] ? EVENTS[0].occupied : 300) + DAYOUT;
+let MOVES = [];
+const _PLATES = ["ABC1D23", "QRS2T45", "MNO9P21", "JKL4M88", "VAG7X10", "ZED3K77", "HJU5R09", "POI8L33"];
+function fmtClock(ms) { const d = new Date(ms); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" + ("0" + d.getSeconds()).slice(-2); }
+function fmtHM(ms) { const d = new Date(ms); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+function _gridOf(v) { return v === "moto" ? 18 : v === "onibus" ? 6 : 40; }
+function _prefOf(v) { return v === "moto" ? "M" : v === "onibus" ? "O" : "C"; }
+function randSpot(v) { return _prefOf(v) + String(1 + Math.floor(Math.random() * _gridOf(v))).padStart(2, "0"); }
+function pushMove(dir, opt) {
+  const v = (opt && opt.vehicle) || ["carro", "carro", "carro", "moto", "onibus"][Math.floor(Math.random() * 5)];
+  const m = { dir, vehicle: v, spot: (opt && opt.spot) || randSpot(v), plate: (opt && opt.plate) || _PLATES[Math.floor(Math.random() * _PLATES.length)], code: (opt && opt.code) || "", t: Date.now() };
+  MOVES.unshift(m); if (MOVES.length > 80) MOVES.pop();
+  if (dir === "in") DAYIN++; else DAYOUT++;
+  return m;
+}
+(function seedMoves() {
+  const now = Date.now();
+  for (let i = 24; i >= 1; i--) {
+    const v = ["carro", "carro", "carro", "moto", "onibus"][Math.floor(Math.random() * 5)];
+    const dir = Math.random() < 0.6 ? "in" : "out";
+    MOVES.push({ dir, vehicle: v, spot: randSpot(v), plate: _PLATES[Math.floor(Math.random() * _PLATES.length)], code: "", t: now - i * (45000 + Math.floor(Math.random() * 150000)) });
+  }
+  MOVES.sort((a, b) => b.t - a.t);
+})();
+const insideNow = () => Math.max(0, DAYIN - DAYOUT);
+function spotsModel() {
+  const r = rateOf(EVENTS[0]);
+  return VEHICLES.map((v) => {
+    const total = v.grid;
+    const reserved = Math.max(0, Math.round(total * 0.07));
+    const occupied = Math.min(total - reserved, Math.round(r * total));
+    const free = Math.max(0, total - occupied - reserved);
+    return { key: v.key, label: v.label, icon: v.icon, prefix: v.prefix, total, occupied, reserved, free };
+  });
+}
+function nextFreeSpots(vk, n) {
+  const m = spotsModel().find((x) => x.key === vk); if (!m) return [];
+  const out = []; const start = m.occupied + m.reserved + 1;
+  for (let i = start; i <= m.total && out.length < n; i++) out.push(m.prefix + String(i).padStart(2, "0"));
+  return out;
+}
+function moveRow(m) {
+  const into = m.dir === "in"; const c = into ? ACC.mint : ACC.amber;
+  return `<tr><td><span class="badge" style="background:${c}1f;color:${c}">${ic(into ? "arrin" : "arrout", "currentColor", 13)} ${into ? "Entrada" : "Saída"}</span></td><td class="mono">${fmtClock(m.t)}</td><td class="mono">${m.spot}</td><td>${vehLabel(m.vehicle)}</td><td class="mono">${m.plate}</td></tr>`;
+}
 const PEAK = [
   ["16h", 38],
   ["17h", 62],
@@ -1407,8 +1479,11 @@ const SEED_USERS = [
   { name: "Visitante Demo", email: "visitante@parkflow.app", phone: "(98) 98800-0000", senha: "123456", role: "user" },
   { name: "Admin Operação", email: "admin@parkflow.app", phone: "(98) 98800-0001", senha: "123456", role: "admin" },
   { name: "Maria Souza", email: "maria@email.com", phone: "(98) 99111-2222", senha: "123456", role: "user" },
+  { name: "Gestor de Operacao", email: "gestor@vagacerta.app", phone: "(98) 98800-0002", senha: "123456", role: "gestor" },
+  { name: "Operador de Guarita", email: "guarita@vagacerta.app", phone: "(98) 98800-0003", senha: "123456", role: "guarita" },
 ];
 let users = store.get("pf_users", SEED_USERS.slice());
+SEED_USERS.forEach((su) => { if (!users.some((u) => u.email.toLowerCase() === su.email.toLowerCase())) users.push(su); });
 let reservations = store.get("pf_res", [
   {
     id: 1,
@@ -1423,6 +1498,18 @@ let reservations = store.get("pf_res", [
 ]);
 const saveUsers = () => store.set("pf_users", users),
   saveRes = () => store.set("pf_res", reservations);
+const TOLERANCIA_MIN = 30;
+function resWhen(r) { return new Date((r.date || "2026-01-01") + "T" + (r.time || "00:00") + ":00").getTime(); }
+function isOverdue(r) { return r.status !== "checkin" && r.status !== "expirada" && r.status !== "cancelada" && r.status !== "concluida" && resWhen(r) + TOLERANCIA_MIN * 6e4 < Date.now(); }
+(function () {
+  const d = new Date(Date.now() - 2 * 36e5);
+  const today = d.toISOString().slice(0, 10);
+  const hhmm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  if (!reservations.some((r) => r.code === "VC-C07-DEMO")) {
+    reservations.unshift({ id: 90007, email: "maria@email.com", eventId: 1, eventName: EVENTS[0].name, local: EVENTS[0].local, spot: "C07", vehicle: "carro", date: today, time: hhmm, name: "Maria Souza", phone: "(98) 99111-2222", priority: "Nao preciso", plate: "ABC1D23", code: "VC-C07-DEMO", status: "futura", createdAt: new Date().toISOString() });
+    saveRes();
+  }
+})();
 
 /* ===================== estado ===================== */
 const S = {
@@ -1443,6 +1530,9 @@ const S = {
   favs: store.get("pf_favs", [2]),
   contrast: store.get("pf_contrast", false),
   query: "",
+  vehicle: "carro",
+  guaritaResult: null,
+  guaritaTab: "acesso",
   geo: null,
   locBannerClosed: store.get("pf_locbanner", false),
 };
@@ -1782,17 +1872,17 @@ function eventoView() {
           <div class="kpis" style="width:100%;margin-top:8px;grid-template-columns:1fr 1fr">
             <div class="card" style="padding:14px;text-align:center;background:var(--elevated);border:none"><div class="mono" style="font-size:22px;font-weight:700;color:${ACC.mint}"><span data-free="${e.id}">${free}</span></div><div class="muted" style="font-size:11px">DISPONÍVEIS</div></div>
             <div class="card" style="padding:14px;text-align:center;background:var(--elevated);border:none"><div class="mono" style="font-size:22px;font-weight:700"><span class="ev-occ">${e.occupied}</span></div><div class="muted" style="font-size:11px">OCUPADAS</div></div></div>
-          <button class="btn" style="width:100%;margin-top:14px" data-act="reservar" data-id="${e.id}">Reservar vaga ${ic("ticket", "#06231C", 16)}</button>
+          ${isReleased(e)
+            ? `<button class="btn" style="width:100%;margin-top:14px" data-act="reservar" data-id="${e.id}">Reservar vaga ${ic("ticket", "#06231C", 16)}</button>`
+            : `<button class="btn" style="width:100%;margin-top:14px;opacity:.6;cursor:not-allowed" disabled>${ic("lock", "#06231C", 16)} Abre em <span data-relcd="${e.id}">${releaseCountdown(e)}</span></button>
+               <div class="muted" style="font-size:12px;text-align:center;margin-top:6px">Reservas liberam em ${fmtShort(e.releaseAt.slice(0, 10))} as ${e.releaseAt.slice(11, 16)}</div>`}
           <button class="ghost" style="width:100%;margin-top:8px" data-act="fav" data-id="${e.id}">${ic("heart", fav ? ACC.coral : "currentColor", 16)} ${fav ? "Nos favoritos" : "Adicionar aos favoritos"}</button>
         </div>
-        <div class="card" style="padding:18px"><div class="eyebrow">Se lotar</div>
-          <div class="muted" style="font-size:13px;margin:8px 0 12px">Parceiros próximos sugeridos automaticamente:</div>
-          ${PARTNERS.slice(0, 2)
-            .map(
-              (p) =>
-                `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">${svgIc(p.type)}<div style="flex:1"><div style="font-size:13px;font-weight:600">${p.name}</div><div class="muted" style="font-size:11px">${p.dist} m · ${p.walk} min</div></div><span class="mono" style="color:${ACC.mint};font-weight:700">${p.free}</span></div>`,
-            )
-            .join("")}</div>
+        <div class="card" style="padding:18px"><div class="eyebrow">Vagas proximas ao SEBRAE</div>
+          <div class="muted" style="font-size:13px;margin:8px 0 12px">Estacionamentos parceiros com vagas disponiveis agora:</div>
+          ${PARTNERS.filter((p) => p.active).map((p) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${svgIc(p.type)}<div style="flex:1"><div style="font-size:13px;font-weight:600">${p.name}</div><div class="muted" style="font-size:11px">${p.dist} m \u00b7 ${p.walk} min a pe \u00b7 ${p.price ? "R$ " + p.price : "gratis"}</div></div><div style="text-align:right"><div class="mono" style="color:${ACC.mint};font-weight:700">${p.free}</div><a class="link" style="font-size:11px" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener">rota \u2192</a></div></div>`).join("")}</div>
+        <div class="card" style="padding:18px"><div class="row" style="margin-bottom:2px;gap:8px">${ic("alert", ACC.coral, 18)}<div class="eyebrow" style="color:${ACC.coral}">Proibido estacionar</div></div>
+          ${NOPARK.map((z) => `<div style="display:flex;gap:10px;margin-top:12px"><div style="width:30px;height:30px;border-radius:9px;background:${ACC.coral}1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic("no", ACC.coral, 16)}</div><div><div style="font-size:13px;font-weight:600">${z.name}</div><div class="muted" style="font-size:11px">${z.desc}</div></div></div>`).join("")}</div>
       </div></div>${footer()}</div></div>`;
 }
 const infoCell = (i, k, v) =>
@@ -1800,6 +1890,32 @@ const infoCell = (i, k, v) =>
 
 /* ===================== RESERVA ===================== */
 const PRIORIDADES = ["Não preciso", "Gestante", "Pessoa com deficiência (PcD)", "Idoso(a) 60+", "Mobilidade reduzida"];
+function isReleased(e) { return !e.releaseAt || new Date(e.releaseAt).getTime() <= Date.now(); }
+function releaseCountdown(e) {
+  let ms = new Date(e.releaseAt).getTime() - Date.now();
+  if (ms <= 0) return "liberada";
+  const d = Math.floor(ms / 864e5); ms -= d * 864e5;
+  const h = Math.floor(ms / 36e5); ms -= h * 36e5;
+  const m = Math.floor(ms / 6e4); ms -= m * 6e4;
+  const sec = Math.floor(ms / 1e3);
+  if (d > 0) return d + "d " + h + "h " + m + "min";
+  if (h > 0) return h + "h " + m + "min";
+  return m + "min " + sec + "s";
+}
+function vehLabel(k) { const v = VEHICLES.find((x) => x.key === k); return v ? v.label : "Carro"; }
+function waMessage(r) {
+  const e = EVENTS.find((x) => x.id === r.eventId) || {};
+  return ("\u2705 *SEBRAE Vaga Certa* \u2014 Reserva confirmada\n\n" +
+    "*Evento:* " + (r.eventName || e.name || "") + "\n" +
+    "*Local:* " + (r.local || e.local || "") + "\n" +
+    "*Data/Horario:* " + fmtShort(r.date) + " as " + r.time + "\n" +
+    "*Veiculo:* " + vehLabel(r.vehicle) + "\n" +
+    "*Vaga reservada:* " + r.spot + "\n" +
+    "*Numero da vaga:* " + r.spot + "\n" +
+    "*Codigo:* " + r.code + "\n\n" +
+    "Apresente o QR/codigo na guarita para liberar o acesso. Chegue ate " + TOLERANCIA_MIN + " min apos o horario para nao perder a vaga.");
+}
+function waLink(r) { return "https://wa.me/?text=" + encodeURIComponent(waMessage(r)); }
 function comprovanteTexto(r) {
   const e = EVENTS.find((x) => x.id === r.eventId) || {};
   return `COMPROVANTE DE RESERVA — SEBRAE VAGA CERTA
@@ -1807,6 +1923,7 @@ function comprovanteTexto(r) {
 Código:        ${r.code}
 Evento:        ${r.eventName || e.name || ""}
 Local:         ${r.local || e.local || ""}
+Veiculo:       ${vehLabel(r.vehicle)}
 Vaga:          ${r.spot}
 Data/Horário:  ${r.date} às ${r.time}
 ------------------------------------------
@@ -1838,21 +1955,33 @@ function downloadText(filename, text) {
 
 function reservarView() {
   const e = ev();
-  const titles = { select: "Escolha data, horário e vaga", info: "Seus dados", confirm: "Confirmar reserva", done: "Reserva confirmada" };
+  if (!isReleased(e)) {
+    return `<div class="view"><div class="wrap"><div style="margin:22px 0 14px"><button class="ghost sm" data-act="detail" data-id="${e.id}">\u2190 ${e.name}</button></div>
+      <div style="margin-bottom:16px"><div class="eyebrow">Reserva</div><h2 style="font-size:24px">Reservas ainda nao liberadas</h2></div>
+      <div class="card" style="padding:26px;max-width:480px;text-align:center">
+        <div style="width:54px;height:54px;border-radius:14px;background:var(--elevated);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">${ic("lock", ACC.amber, 26)}</div>
+        <div style="font-weight:700;font-size:18px;margin-bottom:6px">Abre em <span data-relcd="${e.id}">${releaseCountdown(e)}</span></div>
+        <div class="muted" style="font-size:14px">As reservas para <b>${e.name}</b> serao liberadas em ${fmtShort(e.releaseAt.slice(0, 10))} as ${e.releaseAt.slice(11, 16)}. Volte nesse horario para garantir sua vaga.</div>
+        <button class="ghost" style="margin-top:18px" data-act="detail" data-id="${e.id}">Ver detalhes do evento</button>
+      </div>${footer()}</div></div>`;
+  }
+  const titles = { select: "Escolha veículo, data e vaga", info: "Seus dados", confirm: "Confirmar reserva", done: "Reserva confirmada" };
   let b = "";
   if (S.step === "select") {
-    const takenN = Math.min(38, Math.round((e.occupied / e.total) * 40));
+    const veh = VEHICLES.find((v) => v.key === S.vehicle) || VEHICLES[0];
+    const gridN = veh.grid;
+    const takenN = Math.min(gridN - 2, Math.round((e.occupied / e.total) * gridN));
     let cells = "";
-    for (let i = 0; i < 40; i++) {
-      const code = "A" + String(i + 1).padStart(2, "0"),
+    for (let i = 0; i < gridN; i++) {
+      const code = veh.prefix + String(i + 1).padStart(2, "0"),
         taken = i < takenN,
         sel = S.spot === code;
-      cells += `<button class="spot ${taken ? "taken" : ""} ${sel ? "sel" : ""}" ${taken ? "disabled" : ""} data-act="spot" data-c="${code}">${ic("nav", "currentColor", 13)}</button>`;
+      cells += `<button class="spot ${taken ? "taken" : ""} ${sel ? "sel" : ""}" ${taken ? "disabled" : ""} data-act="spot" data-c="${code}">${ic(veh.icon, "currentColor", 13)}</button>`;
     }
-    b = `<div class="card" style="padding:20px;max-width:680px"><div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    b = `<div class="card" style="padding:20px;max-width:680px"><div class="eyebrow" style="color:var(--muted);margin-bottom:8px">Tipo de veiculo</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">${VEHICLES.map((v) => `<button data-act="vehicle" data-v="${v.key}" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:10px;border:1px solid ${S.vehicle === v.key ? ACC.cyan : "var(--line)"};background:${S.vehicle === v.key ? ACC.cyan + "1f" : "transparent"};color:${S.vehicle === v.key ? ACC.cyan : "var(--text)"};font-weight:600;cursor:pointer;font-size:13px">${ic(v.icon, "currentColor", 16)} ${v.label}</button>`).join("")}</div><div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
         <div style="flex:1;min-width:140px"><label class="f">Data</label><input id="bk-date" type="date" value="${S.date}"></div>
         <div style="flex:1;min-width:140px"><label class="f">Horário</label><input id="bk-time" type="time" value="${S.time}"></div></div>
-      <div class="eyebrow" style="color:var(--muted);margin-bottom:8px">Selecione a vaga</div><div class="spotgrid">${cells}</div>
+      <div class="eyebrow" style="color:var(--muted);margin-bottom:8px">Selecione a vaga \u2014 ${veh.label}</div><div class="spotgrid">${cells}</div>
       <button class="btn" style="margin-top:18px" ${S.spot ? "" : "disabled"} data-act="toinfo">${S.spot ? `Continuar com ${S.spot}` : "Selecione uma vaga"} ${ic("arr", "currentColor", 16)}</button></div>`;
   } else if (S.step === "info") {
     b = `<div class="card" style="padding:22px;max-width:520px">
@@ -1865,7 +1994,7 @@ function reservarView() {
   } else if (S.step === "confirm") {
     const prio = S.resPrio && S.resPrio !== "Não preciso";
     b = `<div class="card" style="padding:22px;max-width:440px;display:flex;flex-direction:column;gap:9px">
-      ${kvr("Evento", e.name)}${kvr("Local", e.local)}${kvr("Vaga", S.spot)}${kvr("Data", fmtShort(S.date))}${kvr("Horário", S.time)}
+      ${kvr("Evento", e.name)}${kvr("Local", e.local)}${kvr("Veículo", vehLabel(S.vehicle))}${kvr("Vaga", S.spot)}${kvr("Data", fmtShort(S.date))}${kvr("Horário", S.time)}
       <div style="height:1px;background:var(--line);margin:4px 0"></div>
       ${kvr("Nome", S.resName)}${kvr("Telefone", S.resPhone)}${S.resPlate ? kvr("Placa", S.resPlate) : ""}${kvr("Prioridade", prio ? S.resPrio : "Não")}
       <div style="height:1px;background:var(--line);margin:4px 0"></div>
@@ -1882,7 +2011,10 @@ function reservarView() {
       <div class="mono" style="color:var(--cyan);letter-spacing:1px;font-weight:700">${last.code}</div>
       <div style="width:100%;background:var(--elevated);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px">
         ${miniRow("Nome", last.name)}${miniRow("Telefone", last.phone)}${miniRow("Vaga", last.spot)}${miniRow("Data", fmtShort(last.date) + " · " + last.time)}${miniRow("Prioridade", prio ? last.priority : "Não")}</div>
-      <div style="display:flex;gap:8px;width:100%"><button class="ghost" style="flex:1" data-act="copycode">${ic("check", "currentColor", 15)} Copiar</button><button class="btn" style="flex:1" data-act="exportres">⤓ Baixar comprovante</button></div>
+      <a class="btn" style="width:100%;background:#25D366;color:#06231C;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none" href="${waLink(last)}" target="_blank" rel="noopener">${ic("wa", "#06231C", 17)} Receber no WhatsApp</a>
+      <div class="muted" style="font-size:12px;text-align:center">Mensagem automatica com evento, horario e n\u00ba da vaga (${last.spot}).</div>
+      <div style="display:flex;gap:8px;width:100%"><button class="ghost" style="flex:1" data-act="copycode">${ic("check", "currentColor", 15)} Copiar</button><button class="btn" style="flex:1" data-act="exportres">\u2913 Baixar comprovante</button></div>
+      <a class="ghost" style="width:100%;text-align:center;text-decoration:none;display:block" href="https://www.google.com/maps/dir/?api=1&destination=${(EVENTS.find((x) => x.id === last.eventId) || {}).lat},${(EVENTS.find((x) => x.id === last.eventId) || {}).lng}" target="_blank" rel="noopener">${ic("nav", "currentColor", 15)} Rota ate a vaga ${last.spot}</a>
       <button class="ghost" style="width:100%" data-go="conta" data-sub="reservas">Ver em Minhas Reservas</button></div>`;
   }
   return `<div class="view"><div class="wrap"><div style="margin:22px 0 14px"><button class="ghost sm" data-act="detail" data-id="${e.id}">← ${e.name}</button></div>
@@ -2027,16 +2159,23 @@ function adminView() {
   return `<div class="view"><div class="shell">
     <aside class="side">
       <div class="brand" data-go="home" style="padding:6px 8px 16px"><svg width="32" height="32" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#0E1420" stroke="#212B3A"/><path d="M20 9a7 7 0 0 1 7 7c0 5-7 12-7 12s-7-7-7-12a7 7 0 0 1 7-7z" fill="${ACC.mint}"/><path d="M16.7 16.2l2.6 2.6 4.4-4.6" fill="none" stroke="#0E1420" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--cyan)">SEBRAE</div><div class="name">Vaga <b>Certa</b></div></div></div>
-      ${it("dashboard", "grid", "Dashboard")}${it("monitor", "cam", "Monitoramento")}${it("reservas", "list", "Reservas")}${it("usuarios", "users", "Usuários")}${it("parceiros", "pin", "Parceiros")}${it("relatorios", "chart", "Relatórios")}${it("config", "gear", "Configurações")}
-      <div style="flex:1"></div><button class="navi" data-act="theme">${ic(S.theme === "dark" ? "sun" : "moon", "currentColor", 18)}Tema</button><button class="navi" data-go="home" style="color:var(--coral)">${ic("out")}Sair do painel</button></aside>
-    <div style="flex:1;min-width:0"><div class="wrap" style="padding:24px 28px"><div class="row" style="margin-bottom:20px"><div><div class="eyebrow">Painel administrativo</div><h2 style="font-size:22px">${adminTitle()}</h2></div><span id="status-pill" class="pill"></span></div>
-      <div class="mobnav" style="margin-bottom:16px">${["dashboard", "monitor", "reservas", "usuarios", "parceiros", "relatorios", "config"].map((p) => `<a class="${S.adminPage === p ? "on" : ""}" data-act="apage" data-p="${p}">${p}</a>`).join("")}</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--faint);text-transform:uppercase;padding:14px 10px 6px">Operação</div>
+      ${it("dashboard", "grid", "Visão geral")}${it("movimentacao", "list", "Movimentação")}${it("vagas", "sliders", "Mapa de vagas")}${it("monitor", "cam", "Câmeras")}
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--faint);text-transform:uppercase;padding:14px 10px 6px">Gestão</div>
+      ${it("reservas", "ticket", "Reservas")}${it("usuarios", "users", "Usuários")}${it("parceiros", "pin", "Parceiros")}
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--faint);text-transform:uppercase;padding:14px 10px 6px">Análise</div>
+      ${it("relatorios", "chart", "Relatórios")}${it("config", "gear", "Configurações")}
+      <div style="flex:1"></div><button class="navi" data-act="theme">${ic(S.theme === "dark" ? "sun" : "moon", "currentColor", 18)}Tema</button><button class="navi" data-act="logout" style="color:var(--coral)">${ic("out")}Sair do painel</button></aside>
+    <div style="flex:1;min-width:0"><div class="wrap" style="padding:24px 28px"><div class="row" style="margin-bottom:20px;flex-wrap:wrap;gap:12px"><div><div class="eyebrow">Gestor de Operação</div><h2 style="font-size:22px">${adminTitle()}</h2></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill" style="color:var(--muted)">${ic("clock", "currentColor", 14)} <span data-clock>${fmtClock(Date.now())}</span></span><span class="pill" style="color:var(--mint)">${ic("user", "currentColor", 14)} ${S.user ? escapeHtml(S.user.name) : ""}</span><span id="status-pill" class="pill"></span></div></div>
+      <div class="mobnav" style="margin-bottom:16px">${["dashboard", "movimentacao", "vagas", "monitor", "reservas", "usuarios", "parceiros", "relatorios", "config"].map((p) => `<a class="${S.adminPage === p ? "on" : ""}" data-act="apage" data-p="${p}">${p}</a>`).join("")}</div>
       ${adminPage()}</div></div></div></div>`;
 }
 const adminTitle = () =>
   ({
     dashboard: "Visão geral",
-    monitor: "Monitoramento de câmeras",
+    movimentacao: "Movimentação — entradas e saídas",
+    vagas: "Mapa de vagas",
+    monitor: "Câmeras de segurança",
     reservas: "Reservas",
     usuarios: "Usuários",
     parceiros: "Estacionamentos parceiros",
@@ -2053,12 +2192,26 @@ function adminPage() {
     const ent = Math.round(e.occupied * 1.6),
       sai = ent - e.occupied;
     return `<div class="grid" style="gap:16px"><div id="alert-slot">${full ? alertBanner(Math.max(1, Math.round((0.9 - r) / 0.012))) : ""}</div>
-      <div class="kpis">${aKpi("Total de vagas", e.total)}${aKpi("Ocupadas", `<span class="k-occ">${e.occupied}</span>`, st.hex)}${aKpi("Livres", `<span class="k-free">${free}</span>`, ACC.mint)}${aKpi("Reservas ativas", reservations.filter((x) => x.status === "futura").length + 12, ACC.cyan)}${aKpi("Entradas hoje", ent)}${aKpi("Saídas hoje", sai)}</div>
+      ${(function () { const ov = reservations.filter(isOverdue); return ov.length ? `<div class="card" style="padding:16px;display:flex;gap:12px;align-items:center;background:${ACC.amber}14;border-color:${ACC.amber}55">${ic("clock", ACC.amber, 22)}<div style="flex:1"><div style="font-weight:700">${ov.length} reserva(s) fora do prazo</div><div class="muted" style="font-size:13px">Passaram da tolerancia de ${TOLERANCIA_MIN} min sem check-in \u2014 vagas podem ser liberadas.</div></div><button class="ghost sm" data-act="apage" data-p="reservas">Ver reservas</button></div>` : ""; })()}
+      <div class="kpis">${aKpi("Total de vagas", e.total)}${aKpi("Dentro agora", `<span class="k-occ">${insideNow()}</span>`, st.hex)}${aKpi("Livres", `<span class="k-free">${free}</span>`, ACC.mint)}${aKpi("Entradas hoje", `<span class="k-ent">${DAYIN}</span>`, ACC.mint)}${aKpi("Saídas hoje", `<span class="k-sai">${DAYOUT}</span>`, ACC.amber)}${aKpi("Reservas ativas", reservations.filter((x) => x.status === "futura").length + 12, ACC.cyan)}</div>
       <div class="charts"><div class="card" style="padding:18px"><div class="eyebrow" style="color:var(--muted)">Horários de pico</div>${barChart()}</div><div class="card" style="padding:18px"><div class="eyebrow" style="color:var(--muted)">Curva de ocupação</div><div id="occ-chart">${areaChart(r)}</div></div></div>
-      <div class="card" style="padding:18px"><div class="row" style="margin-bottom:12px"><div class="eyebrow" style="color:var(--muted)">Rede de parceiros</div><span class="pill" id="ppill" style="color:${full ? ACC.mint : "var(--faint)"}">${full ? "Acionada" : "Em espera"}</span></div>
+      <div class="charts"><div class="card" style="padding:18px"><div class="row" style="margin-bottom:10px"><div class="eyebrow" style="color:var(--muted)">Vagas por tipo</div><button class="ghost sm" data-act="apage" data-p="vagas">Ver mapa</button></div>${spotsModel().map((m) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:8px">${ic(m.icon, ACC.cyan, 16)}<b style="font-size:13px">${m.label}</b></div><div style="display:flex;gap:14px;font-size:12px"><span style="color:${ACC.mint}">${m.free} livres</span><span class="muted">${m.occupied} ocup.</span><span style="color:${ACC.cyan}">${m.reserved} res.</span></div></div>`).join("")}</div><div class="card" style="padding:18px"><div class="row" style="margin-bottom:10px"><div class="eyebrow" style="color:var(--muted)">Últimas movimentações</div><button class="ghost sm" data-act="apage" data-p="movimentacao">Ver tudo</button></div><div id="dash-moves">${MOVES.slice(0, 6).map((m) => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:8px">${ic(m.dir === "in" ? "arrin" : "arrout", m.dir === "in" ? ACC.mint : ACC.amber, 15)}<span style="font-size:13px">${m.dir === "in" ? "Entrada" : "Saída"} · <b class="mono">${m.spot}</b></span></div><span class="mono muted" style="font-size:12px">${fmtClock(m.t)}</span></div>`).join("")}</div></div></div><div class="card" style="padding:18px"><div class="row" style="margin-bottom:12px"><div class="eyebrow" style="color:var(--muted)">Rede de parceiros</div><span class="pill" id="ppill" style="color:${full ? ACC.mint : "var(--faint)"}">${full ? "Acionada" : "Em espera"}</span></div>
         <div class="pgrid">${PARTNERS.map((p) => `<div class="pcard" style="opacity:${full ? 1 : 0.55}">${svgIc(p.type)}<div style="flex:1"><div style="font-size:13px;font-weight:600">${p.name}</div><div class="muted" style="font-size:11px">${p.walk} min</div></div><span class="mono" style="color:${ACC.mint};font-weight:700">${p.free}</span></div>`).join("")}</div></div>
       <div class="card" style="padding:18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div style="width:40px;height:40px;border-radius:11px;background:${ACC.cyan}1f;display:flex;align-items:center;justify-content:center">${ic("chart", ACC.cyan, 20)}</div>
         <div style="flex:1;min-width:220px"><div class="eyebrow" style="color:var(--muted)">Inteligência preditiva</div><div style="font-size:14px;margin-top:2px">Feira · sexta · 6.000 visitantes → pico <b style="color:${ACC.amber}">20h</b>, ocupação <b style="color:${ACC.coral}">96%</b>. <b style="color:${ACC.mint}">Abrir 2 parceiros às 18h30.</b></div></div></div></div>`;
+  }
+  if (S.adminPage === "movimentacao") {
+    return `<div class="grid" style="gap:16px">
+      <div class="kpis">${aKpi("Entradas hoje", `<span class="k-ent">${DAYIN}</span>`, ACC.mint)}${aKpi("Saídas hoje", `<span class="k-sai">${DAYOUT}</span>`, ACC.amber)}${aKpi("Dentro agora", `<span class="k-occ">${insideNow()}</span>`, ACC.cyan)}${aKpi("Atualizado", `<span data-clock>${fmtClock(Date.now())}</span>`)}</div>
+      <div class="card" style="padding:14px 18px;display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:${ACC.mint};box-shadow:0 0 8px ${ACC.mint}"></span><span class="muted" style="font-size:13px">Registro ao vivo de entradas e saídas (cancelas + leitura YOLOv11). Atualiza automaticamente.</span></div>
+      <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>Evento</th><th>Horário</th><th>Vaga</th><th>Veículo</th><th>Placa</th></tr></thead><tbody id="moves-body">${MOVES.slice(0, 16).map(moveRow).join("")}</tbody></table></div></div>`;
+  }
+  if (S.adminPage === "vagas") {
+    const model = spotsModel();
+    return `<div class="grid" style="gap:16px">
+      <div class="kpis">${model.map((m) => aKpi(m.label + " livres", `<span style="color:${ACC.mint}">${m.free}</span> / ${m.total}`)).join("")}${aKpi("Total livres", `<span style="color:${ACC.mint}">${model.reduce((a, b) => a + b.free, 0)}</span>`, ACC.mint)}</div>
+      ${model.map((m) => { let cells = ""; for (let i = 0; i < m.total; i++) { const stt = i < m.occupied ? "occ" : i < m.occupied + m.reserved ? "res" : "free"; const col = stt === "free" ? ACC.mint : stt === "res" ? ACC.cyan : "var(--faint)"; const bg = stt === "free" ? ACC.mint + "22" : stt === "res" ? ACC.cyan + "22" : "var(--elevated)"; cells += `<div title="${m.prefix}${String(i + 1).padStart(2, "0")}" style="aspect-ratio:1;border-radius:8px;background:${bg};border:1px solid ${stt === "free" ? ACC.mint + "55" : "var(--line)"};display:flex;align-items:center;justify-content:center;color:${col};font-size:9px" class="mono">${String(i + 1).padStart(2, "0")}</div>`; } return `<div class="card" style="padding:18px"><div class="row" style="margin-bottom:12px;flex-wrap:wrap;gap:8px"><div style="display:flex;align-items:center;gap:8px">${ic(m.icon, ACC.cyan, 20)}<b>${m.label}</b></div><div style="display:flex;gap:14px;font-size:12px;flex-wrap:wrap"><span style="color:${ACC.mint}">● ${m.free} livres</span><span style="color:${ACC.cyan}">● ${m.reserved} reservadas</span><span class="muted">● ${m.occupied} ocupadas</span></div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:6px">${cells}</div><div class="muted" style="font-size:12px;margin-top:12px">Próximas livres: <b class="mono" style="color:${ACC.mint}">${nextFreeSpots(m.key, 8).join(", ") || "—"}</b></div></div>`; }).join("")}
+    </div>`;
   }
   if (S.adminPage === "monitor") {
     const ent = Math.round(e.occupied * 1.6),
@@ -2073,10 +2226,10 @@ function adminPage() {
       .reverse()
       .map((r) => {
         const prio = r.priority && r.priority !== "Não preciso";
-        return `<tr><td class="mono">${r.code}</td><td>${r.name || r.email}</td><td>${r.spot}</td><td>${fmtShort(r.date)} ${r.time}</td><td>${prio ? `<span class="badge" style="background:${ACC.cyan}1f;color:${ACC.cyan}">${r.priority}</span>` : '<span class="faint">—</span>'}</td><td><span class="badge" style="background:${r.status === "futura" ? ACC.mint + "1f" : "var(--elevated)"};color:${r.status === "futura" ? ACC.mint : "var(--muted)"}">${r.status}</span></td></tr>`;
+        return `<tr><td class="mono">${r.code}</td><td>${r.name || r.email}</td><td>${r.spot}</td><td>${vehLabel(r.vehicle)}</td><td>${fmtShort(r.date)} ${r.time}</td><td>${prio ? `<span class="badge" style="background:${ACC.cyan}1f;color:${ACC.cyan}">${r.priority}</span>` : '<span class="faint">—</span>'}</td><td>${isOverdue(r) ? `<span class="badge" style="background:${ACC.amber}1f;color:${ACC.amber}">fora do prazo</span>` : `<span class="badge" style="background:${r.status === "checkin" ? ACC.cyan + "1f" : r.status === "futura" ? ACC.mint + "1f" : "var(--elevated)"};color:${r.status === "checkin" ? ACC.cyan : r.status === "futura" ? ACC.mint : "var(--muted)"}">${r.status}</span>`}</td></tr>`;
       })
       .join("");
-    return `<div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>Código</th><th>Nome</th><th>Vaga</th><th>Data/hora</th><th>Prioridade</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>Código</th><th>Nome</th><th>Vaga</th><th>Veículo</th><th>Data/hora</th><th>Prioridade</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   if (S.adminPage === "usuarios") {
     const rows = users
@@ -2111,6 +2264,62 @@ function footer() {
   <div style="display:flex;align-items:center;gap:10px"><span class="faint" style="font-size:12px">Realização</span><img src="${LOGO_SEBRAE}" alt="SEBRAE" style="height:22px"></div></div>
   <div class="faint" style="font-size:12px;margin-top:14px">© 2026 SEBRAE Vaga Certa · ${ORG.name} · Complexo Multicenter Negócios e Eventos</div></footer>`;
 }
+function guaritaView() {
+  const e = EVENTS[0];
+  const overdue = reservations.filter(isOverdue);
+  const tab = S.guaritaTab || "acesso";
+  const res = S.guaritaResult;
+  const navi = (id, k, l) => `<button class="navi ${tab === id ? "on" : ""}" data-act="gtab" data-t="${id}">${ic(k, "currentColor", 18)}${l}</button>`;
+  let resCard = "";
+  if (res) {
+    if (!res.ok) resCard = `<div class="card" style="padding:16px;background:${ACC.coral}14;border-color:${ACC.coral}55;font-size:13px">${ic("alert", ACC.coral, 18)} Código <b class="mono">${escapeHtml(res.code || "")}</b> não encontrado.</div>`;
+    else {
+      const r = res.r, done = r.status === "concluida", checked = r.status === "checkin";
+      const color = done ? ACC.mint : checked ? ACC.cyan : res.overdue ? ACC.amber : ACC.mint;
+      const label = done ? "Saída registrada — acesso concluído" : checked ? "Dentro — entrada registrada" : res.overdue ? "Fora do prazo" : "Válida — liberar entrada";
+      resCard = `<div class="card" style="padding:18px;border-color:${color}55">
+        <div class="row" style="margin-bottom:12px"><span class="badge" style="background:${color}1f;color:${color}">${label}</span><span class="mono" style="color:${color};font-weight:700">${r.code}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${miniRow("Nome", r.name || r.email)}${miniRow("Veículo", vehLabel(r.vehicle))}${miniRow("Vaga", r.spot)}${miniRow("Placa", r.plate || "—")}${miniRow("Reserva", fmtShort(r.date) + " " + r.time)}${miniRow("Prioridade", r.priority && r.priority !== "Não preciso" && r.priority !== "Nao preciso" ? r.priority : "Não")}</div>
+        <div style="margin-top:14px">${done ? `<div class="muted" style="font-size:13px">${ic("check", ACC.mint, 15)} Movimentação encerrada às ${r.checkoutAt ? fmtHM(new Date(r.checkoutAt).getTime()) : ""}.</div>` : checked ? `<button class="btn" style="width:100%;background:${ACC.amber};color:#241a00" data-act="checkout" data-code="${r.code}">${ic("arrout", "#241a00", 16)} Registrar saída</button>` : `<button class="btn" style="width:100%" data-act="checkin" data-code="${r.code}">${ic("arrin", "#06231C", 16)} Registrar entrada</button>`}</div>
+      </div>`;
+    }
+  }
+  const cams = ["Cancela de Entrada", "Cancela de Saída", "Pátio Central"].map((n, i) => `<div class="card" style="overflow:hidden"><div style="height:150px;background:linear-gradient(135deg,var(--elevated),var(--surface));position:relative;display:flex;align-items:center;justify-content:center"><div style="position:absolute;left:0;right:0;height:2px;background:${ACC.mint};opacity:.8;top:${50 + i * 6}%"></div><div style="position:absolute;top:8px;left:10px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:${ACC.coral};box-shadow:0 0 8px ${ACC.coral}"></span><span class="mono" style="font-size:10px;color:var(--muted)">REC <span data-clock>${fmtClock(Date.now())}</span></span></div><span class="muted" style="font-size:11px;display:flex;align-items:center;gap:6px">${ic("cam", "var(--muted)", 16)} sinal ao vivo · YOLOv11</span></div><div style="padding:12px"><div class="row"><b style="font-size:13px">${n}</b><span class="badge" style="background:${ACC.mint}1f;color:${ACC.mint}">ao vivo</span></div></div></div>`).join("");
+  const ovList = overdue.length ? overdue.map((r) => `<div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)"><div><div style="font-weight:600;font-size:13px">${r.spot} · ${escapeHtml(r.name || r.email)}</div><div class="muted" style="font-size:11px">${fmtShort(r.date)} ${r.time} · ${vehLabel(r.vehicle)}</div></div><div style="display:flex;gap:6px"><button class="ghost sm" data-act="checkin" data-code="${r.code}">Entrada</button><button class="ghost sm" data-act="expirar" data-code="${r.code}" style="color:${ACC.coral}">Expirar</button></div></div>`).join("") : `<div class="muted" style="font-size:13px;padding:8px 0">Nenhuma reserva fora do prazo.</div>`;
+  const spots = spotsModel();
+  let content = "";
+  if (tab === "acesso") {
+    content = `<div class="grid" style="grid-template-columns:1.1fr .9fr;gap:20px;align-items:start">
+      <div class="card" style="padding:20px"><div class="eyebrow" style="margin-bottom:12px">Validar acesso (QR / código)</div>
+        <div style="display:flex;gap:8px"><input id="gq" placeholder="VC-C07-DEMO" style="flex:1" value="${escapeHtml((res && res.code) || "")}"><button class="btn sm" data-act="validarQR">Validar</button></div>
+        ${resCard ? `<div style="margin-top:14px">${resCard}</div>` : `<div class="muted" style="font-size:12px;margin-top:12px">Leia o QR do visitante ou digite o código do comprovante para liberar entrada ou saída.</div>`}
+      </div>
+      <div class="card" style="padding:20px"><div class="row" style="margin-bottom:6px;gap:8px">${ic("clock", overdue.length ? ACC.amber : "var(--muted)", 18)}<div class="eyebrow" style="color:${overdue.length ? ACC.amber : "var(--muted)"}">Fora do prazo (${overdue.length})</div></div>${ovList}</div>
+    </div>`;
+  } else if (tab === "cameras") {
+    content = `<div class="pgrid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${cams}</div>
+      <div class="card" style="padding:16px;margin-top:16px;font-size:13px;display:flex;align-items:center;gap:8px"><span class="muted">${ic("cam", "var(--muted)", 16)} Contagem por linha virtual (YOLOv11 + OpenCV) nas cancelas — entradas e saídas alimentam a ocupação em tempo real.</span></div>`;
+  } else if (tab === "movimentacao") {
+    content = `<div class="card" style="padding:14px 18px;display:flex;align-items:center;gap:10px;margin-bottom:16px"><span style="width:8px;height:8px;border-radius:50%;background:${ACC.mint};box-shadow:0 0 8px ${ACC.mint}"></span><span class="muted" style="font-size:13px">Entradas e saídas ao vivo nas cancelas — atualiza automaticamente.</span></div>
+      <div class="card" style="padding:0;overflow-x:auto"><table><thead><tr><th>Evento</th><th>Horário</th><th>Vaga</th><th>Veículo</th><th>Placa</th></tr></thead><tbody id="guarita-moves">${MOVES.slice(0, 14).map(moveRow).join("")}</tbody></table></div>`;
+  } else {
+    content = `<div class="grid" style="gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">${spots.map((m) => `<div class="card" style="padding:18px"><div class="row" style="margin-bottom:6px"><div style="display:flex;align-items:center;gap:8px">${ic(m.icon, ACC.cyan, 18)}<b>${m.label}</b></div><span style="color:${ACC.mint};font-weight:700;font-size:20px" class="mono">${m.free}</span></div><div class="muted" style="font-size:12px">livres de ${m.total} · ${m.occupied} ocupadas · ${m.reserved} reservadas</div><div style="height:8px;border-radius:6px;background:var(--elevated);margin:12px 0;overflow:hidden"><div style="height:100%;width:${Math.round((m.occupied / m.total) * 100)}%;background:${ACC.cyan}"></div></div><div class="muted" style="font-size:12px">Próximas livres: <b class="mono" style="color:${ACC.mint}">${nextFreeSpots(m.key, 6).join(", ") || "—"}</b></div></div>`).join("")}</div>`;
+  }
+  const titles = { acesso: "Controle de acesso", cameras: "Câmeras de segurança", movimentacao: "Movimentação ao vivo", vagas: "Vagas disponíveis" };
+  return `<div class="view"><div class="shell">
+    <aside class="side">
+      <div class="brand" data-go="home" style="padding:6px 8px 16px"><svg width="32" height="32" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#0E1420" stroke="#212B3A"/><path d="M20 9a7 7 0 0 1 7 7c0 5-7 12-7 12s-7-7-7-12a7 7 0 0 1 7-7z" fill="${ACC.mint}"/></svg><div><div style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--cyan)">SEBRAE</div><div class="name">Vaga <b>Certa</b></div></div></div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--faint);text-transform:uppercase;padding:8px 10px 6px">Guarita</div>
+      ${navi("acesso", "shield", "Acesso")}${navi("cameras", "cam", "Câmeras")}${navi("movimentacao", "list", "Movimentação")}${navi("vagas", "sliders", "Vagas")}
+      <div style="flex:1"></div><button class="navi" data-act="theme">${ic(S.theme === "dark" ? "sun" : "moon", "currentColor", 18)}Tema</button><button class="navi" data-act="logout" style="color:var(--coral)">${ic("out")}Sair</button></aside>
+    <div style="flex:1;min-width:0"><div class="wrap" style="padding:24px 28px">
+      <div class="row" style="margin-bottom:18px;flex-wrap:wrap;gap:12px"><div><div class="eyebrow">Operação de campo</div><h2 style="font-size:22px">${titles[tab]}</h2></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="pill" style="color:var(--muted)">${ic("clock", "currentColor", 14)} <span data-clock>${fmtClock(Date.now())}</span></span><span class="pill" style="color:${ACC.mint}">${ic("user", "currentColor", 14)} ${S.user ? escapeHtml(S.user.name) : ""}</span></div></div>
+      <div class="kpis" style="margin-bottom:18px">${aKpi("Câmeras ativas", "3 / 3", ACC.mint)}${aKpi("Entradas hoje", `<span class="k-ent">${DAYIN}</span>`, ACC.mint)}${aKpi("Saídas hoje", `<span class="k-sai">${DAYOUT}</span>`, ACC.amber)}${aKpi("Dentro agora", `<span class="k-occ">${insideNow()}</span>`, ACC.cyan)}${aKpi("Fora do prazo", overdue.length, overdue.length ? ACC.amber : undefined)}</div>
+      <div class="mobnav" style="margin-bottom:16px">${["acesso", "cameras", "movimentacao", "vagas"].map((pp) => `<a class="${tab === pp ? "on" : ""}" data-act="gtab" data-t="${pp}">${pp}</a>`).join("")}</div>
+      ${content}
+    </div></div></div></div>`;
+}
 function authModal() {
   if (!S.authOpen) return "";
   const m = S.authMode;
@@ -2125,7 +2334,12 @@ function authModal() {
     <div class="row" style="margin-bottom:14px"><button class="link" data-act="authmode" data-m="forgot">Esqueci a senha</button></div>
     <button class="btn" style="width:100%" data-act="dologin">Entrar</button>
     <div style="text-align:center;margin-top:14px;font-size:13px" class="muted">Não tem conta? <button class="link" data-act="authmode" data-m="signup">Criar conta</button></div>
-    <div class="card" style="padding:10px;margin-top:14px;font-size:11px" class="muted">Demo · visitante@parkflow.app · admin@parkflow.app · senha 123456</div>`;
+    <div style="margin-top:14px"><div class="muted" style="font-size:11px;margin-bottom:8px">Acesso rapido (demo \u00b7 senha 123456)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <button class="ghost sm" data-act="quicklogin" data-e="visitante@parkflow.app">Cliente</button>
+      <button class="ghost sm" data-act="quicklogin" data-e="gestor@vagacerta.app">Gestor</button>
+      <button class="ghost sm" data-act="quicklogin" data-e="guarita@vagacerta.app">Guarita</button>
+    </div></div>`;
   else if (m === "signup")
     body = `<h2 style="font-size:22px">Criar conta</h2><div class="muted" style="margin:4px 0 18px">Informe e-mail, telefone e senha</div>${err}
     <div class="field"><label class="f">E-mail *</label><input id="su-email" type="email" placeholder="voce@email.com"></div>
@@ -2146,9 +2360,13 @@ const brandMini = () => `<div class="brand"><div class="name">SEBRAE <b>Vaga Cer
 /* ===================== render ===================== */
 let mapInst = null;
 function render() {
-  const isAdmin = S.route === "admin" && S.user && S.user.role === "admin";
+  const role = S.user && S.user.role;
+  if ((role === "admin" || role === "gestor") && S.route !== "admin") S.route = "admin";
+  else if (role === "guarita" && S.route !== "guarita") S.route = "guarita";
+  const isAdmin = S.route === "admin" && (role === "admin" || role === "gestor");
+  const isGuarita = S.route === "guarita" && role === "guarita";
   $("#root").innerHTML =
-    (isAdmin ? "" : locBanner() + header()) +
+    ((isAdmin || isGuarita) ? "" : locBanner() + header()) +
     (S.route === "home"
       ? homeView()
       : S.route === "eventos"
@@ -2163,7 +2381,9 @@ function render() {
                 ? contaView()
                 : isAdmin
                   ? adminView()
-                  : homeView());
+                  : isGuarita
+                    ? guaritaView()
+                    : homeView());
   $("#modal-root").innerHTML = authModal();
   if (isAdmin) updatePill();
   if (S.route === "home") initMap("#minimap", [MAIN_PT()], 220);
@@ -2180,6 +2400,13 @@ function updatePill() {
   p.innerHTML = `<span class="dot" style="background:${st.hex}"></span>${Math.round(r * 100)}%`;
 }
 function updateLive() {
+  let _rr = false;
+  $$("[data-relcd]").forEach((el) => { const e = EVENTS.find((x) => x.id === +el.dataset.relcd); if (e) { if (isReleased(e)) _rr = true; else el.textContent = releaseCountdown(e); } });
+  if (_rr && (S.route === "reservar" || S.route === "evento")) render();
+  if ($("#moves-body")) $("#moves-body").innerHTML = MOVES.slice(0, 16).map(moveRow).join("");
+  if ($("#guarita-moves")) $("#guarita-moves").innerHTML = MOVES.slice(0, 14).map(moveRow).join("");
+  if ($("#dash-moves")) $("#dash-moves").innerHTML = MOVES.slice(0, 6).map((m) => `<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:8px">${ic(m.dir === "in" ? "arrin" : "arrout", m.dir === "in" ? ACC.mint : ACC.amber, 15)}<span style="font-size:13px">${m.dir === "in" ? "Entrada" : "Saída"} · <b class="mono">${m.spot}</b></span></div><span class="mono muted" style="font-size:12px">${fmtClock(m.t)}</span></div>`).join("");
+  if (S.route === "guarita") { $$(".k-occ").forEach((x) => (x.textContent = insideNow())); $$(".k-ent").forEach((x) => (x.textContent = DAYIN)); $$(".k-sai").forEach((x) => (x.textContent = DAYOUT)); }
   EVENTS.forEach((e) => {
     const r = rateOf(e),
       st = statusOf(r),
@@ -2206,9 +2433,9 @@ function updateLive() {
     updatePill();
     $$(".k-occ").forEach((x) => (x.textContent = e.occupied));
     $$(".k-free").forEach((x) => (x.textContent = free));
-    const ent = Math.round(e.occupied * 1.6);
+    const ent = DAYIN;
     $$(".k-ent").forEach((x) => (x.textContent = ent));
-    $$(".k-sai").forEach((x) => (x.textContent = ent - e.occupied));
+    $$(".k-sai").forEach((x) => (x.textContent = DAYOUT));
     if ($("#alert-slot")) $("#alert-slot").innerHTML = full ? alertBanner(Math.max(1, Math.round((0.9 - r) / 0.012))) : "";
     if ($("#occ-chart")) $("#occ-chart").innerHTML = areaChart(r);
     if ($("#ppill")) {
@@ -2249,6 +2476,11 @@ function initMap(sel, pts, h) {
       L.circleMarker([p.lat, p.lng], { radius: 7, color: "#fff", fillColor: ACC.cyan, fillOpacity: 0.95, weight: 2 })
         .addTo(mapInst)
         .bindTooltip(p.name + " · " + p.free + " vagas · " + p.walk + " min a pé"),
+    );
+    NOPARK.forEach((z) =>
+      L.circleMarker([z.lat, z.lng], { radius: 8, color: "#fff", fillColor: ACC.coral, fillOpacity: 0.95, weight: 2 })
+        .addTo(mapInst)
+        .bindTooltip("\uD83D\uDEAB " + z.name + " \u2014 proibido estacionar", { direction: "top" }),
     );
     if (S.geo) drawRoute(mapInst, S.geo, { lat: pts[0][0], lng: pts[0][1] });
     if (!window._pfResize) {
@@ -2369,7 +2601,8 @@ document.addEventListener("click", (e) => {
     S.authOpen = false;
     const after = S._after;
     S._after = null;
-    if (u.role === "admin") S.route = "admin";
+    if (u.role === "admin" || u.role === "gestor") S.route = "admin";
+    else if (u.role === "guarita") S.route = "guarita";
     else if (after) after();
     window.scrollTo(0, 0);
     render();
@@ -2451,6 +2684,35 @@ document.addEventListener("click", (e) => {
   } else if (a === "apage") {
     S.adminPage = t.dataset.p;
     render();
+  } else if (a === "vehicle") {
+    S.vehicle = t.dataset.v;
+    S.spot = null;
+    render();
+  } else if (a === "quicklogin") {
+    const u = users.find((x) => x.email.toLowerCase() === t.dataset.e.toLowerCase());
+    if (!u) { S.authErr = "Conta demo indisponivel."; render(); return; }
+    S.user = u; store.set("pf_session", u); S.authOpen = false;
+    const after = S._after; S._after = null;
+    if (u.role === "admin" || u.role === "gestor") S.route = "admin";
+    else if (u.role === "guarita") S.route = "guarita";
+    else if (after) after();
+    window.scrollTo(0, 0); render();
+  } else if (a === "validarQR") {
+    const code = (val("#gq") || "").toUpperCase();
+    const r = reservations.find((x) => x.code.toUpperCase() === code);
+    S.guaritaResult = r ? { ok: true, r, overdue: isOverdue(r), checked: r.status === "checkin", code } : { ok: false, code };
+    render();
+  } else if (a === "checkin") {
+    const r = reservations.find((x) => x.code === t.dataset.code);
+    if (r) { r.status = "checkin"; r.checkinAt = new Date().toISOString(); saveRes(); pushMove("in", { spot: r.spot, plate: r.plate, vehicle: r.vehicle, code: r.code }); S.guaritaResult = { ok: true, r, overdue: false, checked: true, code: r.code }; toast("Entrada registrada \u2014 " + r.spot); render(); }
+  } else if (a === "expirar") {
+    const r = reservations.find((x) => x.code === t.dataset.code);
+    if (r) { r.status = "expirada"; saveRes(); toast("Reserva marcada como expirada"); render(); }
+  } else if (a === "checkout") {
+    const r = reservations.find((x) => x.code === t.dataset.code);
+    if (r) { r.status = "concluida"; r.checkoutAt = new Date().toISOString(); saveRes(); pushMove("out", { spot: r.spot, plate: r.plate, vehicle: r.vehicle, code: r.code }); S.guaritaResult = { ok: true, r, overdue: false, checked: true, code: r.code }; toast("Saída registrada \u2014 " + r.spot); render(); }
+  } else if (a === "gtab") {
+    S.guaritaTab = t.dataset.t; render();
   } else if (a === "spot") {
     S.spot = t.dataset.c;
     render();
@@ -2488,6 +2750,7 @@ document.addEventListener("click", (e) => {
       eventName: e.name,
       local: e.local,
       spot: S.spot,
+      vehicle: S.vehicle,
       date: S.date,
       time: S.time,
       name: S.resName,
@@ -2663,15 +2926,16 @@ function botReply(t) {
 
 /* ===================== live + init ===================== */
 setInterval(() => {
-  EVENTS.forEach((e) => {
+  const e0 = EVENTS[0];
+  if (Math.random() < 0.5) pushMove("in"); else pushMove("out");
+  e0.occupied = Math.max(Math.round(e0.total * 0.2), Math.min(Math.round(e0.total * 0.99), insideNow()));
+  EVENTS.slice(1).forEach((e) => {
     const d = Math.random() < 0.6 ? 1 : -1;
-    e.occupied = Math.max(
-      Math.round(e.total * 0.2),
-      Math.min(Math.round(e.total * 0.99), e.occupied + d * (1 + Math.floor(Math.random() * 3))),
-    );
+    e.occupied = Math.max(Math.round(e.total * 0.2), Math.min(Math.round(e.total * 0.99), e.occupied + d * (1 + Math.floor(Math.random() * 3))));
   });
   updateLive();
 }, 1600);
+setInterval(() => { const c = fmtClock(Date.now()); $$("[data-clock]").forEach((el) => (el.textContent = c)); }, 1000);
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" || !e.target) return;
   if (e.target.id === "searchin") {
@@ -2683,6 +2947,8 @@ document.addEventListener("keydown", (e) => {
   }
 });
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+if (S.user && (S.user.role === "admin" || S.user.role === "gestor")) S.route = "admin";
+else if (S.user && S.user.role === "guarita") S.route = "guarita";
 applyTheme();
 render();
 renderBot();
